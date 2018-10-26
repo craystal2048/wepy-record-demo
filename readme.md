@@ -6,7 +6,7 @@ git clone https://github.com/craystal2048/wepy-record-demo.git
 cd wepy-record-demo
 
 npm install;
-
+wepy build -w;
 用微信开发工具打开wepy-record-demo；
 如果需要编码；则每次编码完，需要执行wepy build -w 将小程序打包到dist文件夹
 
