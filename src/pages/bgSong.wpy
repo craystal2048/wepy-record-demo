@@ -1,0 +1,303 @@
+<style lang='less'>
+.containerbox {
+  width: 100%;
+  height: 100%;
+}
+.container {
+  width: 100%;
+  height: 100%;
+}
+.bg {
+  width: 100%;
+  height: 100%;
+  position: absolute;
+  left:0;
+  top:0;
+  z-index:-2;
+}
+.bg image {
+  width: 100%;
+  height: 1300rpx;
+  -webkit-filter: blur(10px) brightness(0.5);
+  filter: blur(10px) brightness(0.5);
+}
+.download {
+  text-align: center;
+}
+.lyric-wrap {
+  height: unit(550, rpx);
+  margin-top: unit(400, rpx);
+  margin-bottom: unit(20, rpx);
+  overflow-y: hidden;
+  text-align: center;
+  font-size: 14px;
+  padding-top: unit(60, rpx);
+  transition: all ease 0.5s;
+  view {
+    opacity: 0.7;
+    color: #fff;
+    line-height: unit(50, rpx);
+  }
+  .cur {
+    transition: all ease 0.5s;
+    font-size: 16px;
+    opacity: 1;
+  }
+}
+.operate {
+  display: flex;
+  justify-content: center;
+  .resume,
+  .pause {
+    width: unit(55, rpx);
+    height: unit(55, rpx);
+  }
+}
+.progress {
+  width: 100%;
+  height: unit(30, rpx);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 unit(60, rpx);
+  box-sizing: border-box;
+  span {
+    font-size: 12px;
+    color: #fff;
+  }
+  progress {
+    width: unit(500, rpx);
+  }
+}
+</style>
+
+<template>
+    <view class='containerbox'>
+        <view class='download' wx:if="{{unready}}">
+            下载中{{process}}
+        </view>
+        <view class='container' wx:else>
+            <view class='bg'>
+                <image src='{{bgurl}}'/>
+            </view>
+            <view class="lyric-wrap">
+              <view class="lyric" style="transform:translateY(-{{curInd*100/(lyric.length+6)}}%)">
+                <repeat for="{{lyric}}" key="index" index="index" item="item">
+                  <view class="{{curInd==index?'cur':''}}">{{item.lrc}}</view>
+                </repeat>
+              </view>
+            </view>
+            <view class="progress">
+              <span>{{playTime}}</span>
+              <progress percent="{{percent}}"></progress>
+              <span>{{duration}}</span>
+            </view>
+            <view class='operate'>
+                <image src="../img/ajf.png" class="resume" @tap="bindPlay" wx:if="{{playBg}}"/>
+                <image src="../img/ajd.png" class="pause" @tap="pause" wx:else/>
+            </view>
+            <view class='banzou'>
+                <button wx:if="{{banzou}}" @tap="changeBanzou">伴奏</button>
+                <button wx:else @tap="changeYuanchang">原唱</button>
+            </view>
+            <view>
+                <button @tap="stop">停止</button>
+            </view>
+     </view>
+        
+    </view>
+</template>
+<script>
+import wepy from 'wepy'
+import {parseLrc, formatDuration, showUpdate} from '../lib/util'
+// const InnerAudioContext = wx.createInnerAudioContext()
+// const InnerAudioContextYuan = wx.createInnerAudioContext()
+const BackgroundAudioManager = wx.getBackgroundAudioManager()
+const RecorderManager = wx.getRecorderManager()
+export default class songs extends wepy.page {
+  data = {
+    song: '',
+    bgurl: '',
+    unready: true,
+    bgBanzouMusicUrl: '',
+    bgYuanMusicUrl: '',
+    process: '0%',
+    playBg: true,
+    playTime: 0,
+    percent: 0,
+    duration: 0,
+    banzou: true,
+    lyric: [],
+    curInd: 0
+  }
+  methods = {
+    bindPlay() {
+      const self = this
+      this.playBg = false
+      wx.authorize({
+        scope: 'scope.record',
+        success: () => {
+          self.play()
+        }
+      })
+    },
+    pause() {
+      this.playBg = true
+      RecorderManager.pause()
+      BackgroundAudioManager.pause()
+    },
+    changeBanzou() {
+      this.banzou = !this.banzou
+      const cuurentTime = BackgroundAudioManager.currentTime
+      BackgroundAudioManager.src = this.bgYuanMusicUrl
+      BackgroundAudioManager.startTime = cuurentTime
+
+    },
+    changeYuanchang() {
+      this.banzou = !this.banzou
+      const cuurentTime = BackgroundAudioManager.currentTime
+      BackgroundAudioManager.src = this.bgBanzouMusicUrl
+      BackgroundAudioManager.startTime = cuurentTime
+     
+    },
+    stop() {
+      this.playBg = true
+      RecorderManager.stop()
+      BackgroundAudioManager.stop()
+    }
+  }
+  onLoad(query) {
+    this.getSong(query)
+    this.getLryic(query)
+  }
+  getSong = async query => {
+    const data = await wepy.request({
+      url: 'http://localhost:9000/v1/music/detail?id=' + query.id,
+      method: 'get'
+    })
+    await this.downloadfile(data.data.songUrl)
+    await this.downloadYuanfile(data.data.songUrl)
+    this.bgurl = data.data.picUrl
+    this.duration = formatDuration(data.data.duration*1)
+    console.log(data)
+  }
+  getLryic = async query => {
+    const data = await wepy.request({
+      url: 'http://localhost:9000/v1/lyric?id=' + query.id,
+      method: 'get'
+    })
+    this.lyric = parseLrc(data.data.lyric).now_lrc
+    this.$apply()
+    console.log(data)
+  }
+
+  downloadfile = url => {
+    const self = this
+    url = 'https://wsbanzou.sslmp3img.changba.com/vod1/music/e49810a308de64efe8e8d818ee3d0e42.mp3'// 由于版权问题，所以先使用代替的两个音乐文件
+    const banzouUrl = url
+    if (wx.getStorageSync(banzouUrl)) {
+      self.unready = false
+      self.bgBanzouMusicUrl = wx.getStorageSync(banzouUrl)
+      self.$apply()
+      return
+    }
+    const downloadTask = wx.downloadFile({
+      url: url,
+      success(res) {
+        // 只要服务器有响应数据，就会把响应内容写入文件并进入 success 回调，业务需要自行判断是否下载到了想要的内容
+        if (res.statusCode === 200) {
+          wx.setStorageSync(banzouUrl, res.tempFilePath)
+          self.bgBanzouMusicUrl = res.tempFilePath
+          self.unready = false
+          self.$apply()
+        }
+      }
+    })
+    downloadTask.onProgressUpdate(res => {
+      self.process = res.progress + '%'
+      self.$apply()
+    })
+  }
+  downloadYuanfile = url => {
+    const self = this
+    url = 'https://m10.music.126.net/20181025154118/49620cf4810b0abfcbb459b60f7dce58/ymusic/afec/8b3a/6745/ec2c0046e5a80032f377012448795bb2.mp3'// 由于版权问题，所以先使用代替的两个音乐文件
+    const banzouUrl = url
+    if (wx.getStorageSync(banzouUrl)) {
+      self.unready = false
+      self.bgYuanMusicUrl = wx.getStorageSync(banzouUrl)
+      self.$apply()
+      return
+    }
+    const downloadTask = wx.downloadFile({
+      url: url,
+      success(res) {
+        // 只要服务器有响应数据，就会把响应内容写入文件并进入 success 回调，业务需要自行判断是否下载到了想要的内容
+        if (res.statusCode === 200) {
+          wx.setStorageSync(banzouUrl, res.tempFilePath)
+          self.bgYuanMusicUrl = res.tempFilePath
+          self.unready = false
+          self.$apply()
+        }
+      }
+    })
+  }
+  play = () => {
+    const options = {
+      duration: this.duration * 1,
+      sampleRate: 44100,
+      numberOfChannels: 1,
+      encodeBitRate: 192000,
+      format: 'mp3',
+      frameSize: 50
+    }
+    BackgroundAudioManager.src = this.bgBanzouMusicUrl
+    BackgroundAudioManagerYuan.src = this.bgYuanMusicUrl
+    BackgroundAudioManager.play()
+    BackgroundAudioManagerYuan.play()
+    BackgroundAudioManagerYuan.volume = 0
+    RecorderManager.start(options)
+    BackgroundAudioManager.onTimeUpdate(() => { // 监听背景音乐播放进度更新事件
+        console.log("jinlai")
+        let ind = 0
+        this.percent = (BackgroundAudioManager.currentTime / BackgroundAudioManager.duration) * 100
+        for (let i = 0; i < this.lyric.length; i++) {
+          if (BackgroundAudioManager.currentTime > this.lyric[i].lrc_sec) {
+            ind = i
+          }
+        }
+        this.playTime = formatDuration(BackgroundAudioManager.currentTime * 1000)
+        this.curInd = ind
+        this.$apply()
+      })
+    BackgroundAudioManager.onPause(() => { // 背景音乐暂停
+      this.playBg = false
+      RecorderManager.pause()
+    })
+    BackgroundAudioManager.onPlay(() => {
+      console.log('sdsd')
+    })
+    BackgroundAudioManager.onStop(() => { // 背景音乐停止
+      RecorderManager.stop()
+    })
+    BackgroundAudioManager.onEnded(() => { // 背景音乐自然结束
+      this.playBg = false
+      RecorderManager.stop()
+    })
+    RecorderManager.onStop((res) => {
+      console.log(res)
+      wx.uploadFile({
+      url: 'http://localhost:9000/upload', 
+      filePath: res.tempFilePath,
+      name: 'file',
+      formData: {
+        'user': 'test'
+      },
+      success (res){
+        const data = res.data
+        //do something
+      }
+    })
+    })
+  }
+}
+</script>

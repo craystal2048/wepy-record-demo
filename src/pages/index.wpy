@@ -1,0 +1,93 @@
+<style lang="less">
+</style>
+<template>
+  <view class="container">
+    <repeat for='{{songsList}}' key='index' index='index' item='item'>
+      <view data-id='{{item.id}}' data-song='{{item.songUrl}}' bind:tap='jumpSongs' >
+          <image src='{{item.picUrl}}'/>
+          <view>{{item.name}}</view>
+      </view>
+    </repeat>
+    <button open-type="getUserInfo" lang="zh_CN" bindgetuserinfo="onGotUserInfo">获取用户信息</button>
+    <button type="default" bind:tap="recordStart">
+        录音开始
+    </button>
+  </view>
+</template>
+
+<script>
+import wepy from 'wepy'
+
+export default class Index extends wepy.page {
+  config = {
+    navigationBarTitleText: 'test'
+  }
+  components = {}
+
+  data = {
+    songsList: []
+  };
+
+  computed = {}
+
+  methods = {
+    onGotUserInfo: function(e) {
+      console.log(e.detail.errMsg)
+      console.log(e.detail.userInfo)
+      console.log(e.detail.rawData)
+    },
+    recordStart: function(e) {
+      // 获取用户授权
+
+      wx.authorize({
+        scope: 'scope.record',
+        success: () => {
+          console.log('1111')
+        }
+      })
+      // wx.getSetting({
+      //   success: function(res) {
+      //     console.log(res)
+      //    if(!res.authSetting['scope.record']){
+      //      wx.authorize({scope: "scope.record"})
+      //    }
+      //   }
+      // })
+      const RecorderManager = wx.getRecorderManager()
+      // RecorderManager.start
+      const options = {
+        duration: 10000,
+        sampleRate: 44100,
+        numberOfChannels: 1,
+        encodeBitRate: 192000,
+        format: 'aac',
+        frameSize: 50
+      }
+      RecorderManager.start(options)
+      console.log(RecorderManager)
+    },
+    jumpSongs: function(e) {
+      console.log(e)
+      wx.navigateTo({
+        url: 'songs?id=' + e.currentTarget.dataset.id
+      })
+    }
+  }
+
+  events = {}
+
+  onLoad() {
+    this.getList()
+  }
+  getList = async () => {
+    const self = this
+    const req = {
+      method: 'get',
+      url: 'http://localhost:9000/v1/list'
+    }
+    const data = await wepy.request(req)
+    self.songsList = data.data
+    self.$apply()
+  }
+}
+</script>
